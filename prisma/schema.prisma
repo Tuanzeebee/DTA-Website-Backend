@@ -1,0 +1,172 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleName {
+  SUPER_ADMIN
+  ADMIN
+  EDITOR
+  AUTHOR
+  MEMBER
+  USER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BANNED
+}
+
+enum ArticleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum BlockType {
+  TEXT
+  IMAGE
+  BOX
+}
+
+enum ImageAlign {
+  LEFT
+  RIGHT
+  CENTER
+}
+
+enum ImageWrap {
+  SQUARE
+  NONE
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  passwordHash  String
+  fullName      String
+  avatarUrl     String?
+  status        UserStatus     @default(ACTIVE)
+  roles         UserRole[]
+  articles      NewsArticle[]
+  refreshTokens RefreshToken[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@map("users")
+}
+
+model Role {
+  id          Int        @id @default(autoincrement())
+  name        RoleName   @unique
+  description String?
+  users       UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  userId String
+  roleId Int
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model NewsTopic {
+  id         Int            @id @default(autoincrement())
+  slug       String         @unique
+  name       String
+  shortName  String?
+  nameEn     String?
+  shortEn    String?
+  sortOrder  Int            @default(0)
+  categories NewsCategory[]
+
+  @@map("news_topics")
+}
+
+model NewsCategory {
+  id          Int           @id @default(autoincrement())
+  wpId        Int?          @unique
+  topicId     Int
+  slug        String        @unique
+  name        String
+  description String?
+  sortOrder   Int           @default(0)
+  topic       NewsTopic     @relation(fields: [topicId], references: [id], onDelete: Restrict)
+  articles    NewsArticle[]
+
+  @@map("news_categories")
+}
+
+model NewsArticle {
+  id           String        @id @default(uuid())
+  wpId         Int?          @unique
+  slug         String        @unique
+  title        String
+  summary      String?       @db.Text
+  thumbnailUrl String?
+  categoryId   Int
+  authorId     String?
+  sourceUrl    String?
+  rawHtml      String?       @db.Text
+  tags         String[]      @default([])
+  viewsCount   Int           @default(0)
+  pdfUrl       String?
+  memberUrl    String?
+  isIntern     Boolean       @default(false)
+  status       ArticleStatus @default(DRAFT)
+  publishedAt  DateTime?
+  deletedAt    DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  category     NewsCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  author       User?         @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  blocks       NewsBlock[]
+
+  @@index([status, publishedAt])
+  @@index([categoryId])
+  @@index([authorId])
+  @@map("news_articles")
+}
+
+model NewsBlock {
+  id             Int         @id @default(autoincrement())
+  articleId      String
+  position       Int
+  type           BlockType
+  text           String?     @db.Text
+  imageUrl       String?
+  imageLocalPath String?
+  alt            String?
+  caption        String?
+  align          ImageAlign  @default(CENTER)
+  wrap           ImageWrap   @default(NONE)
+  width          Int?
+  isFeatured     Boolean     @default(false)
+  article        NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([articleId, position])
+  @@map("news_blocks")
+}
