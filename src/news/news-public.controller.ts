@@ -29,6 +29,20 @@ export class NewsPublicController {
     return this.articlesService.listPublished(query);
   }
 
+  /** Single-call digest: returns latest N articles for each of the given topics. */
+  @Public()
+  @Get('articles/digest')
+  digest(
+    @Query('topics') topicsCsv?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    const topics = topicsCsv
+      ? topicsCsv.split(',').map((s) => s.trim()).filter(Boolean)
+      : ['su-kien', 'digi-tech', 'mai-nha-chung', 'da-nang-24h'];
+    const size = Math.min(Number(pageSize) || 3, 10);
+    return this.articlesService.getDigest(topics, size);
+  }
+
   @Public()
   @Get('articles/:slug')
   articleDetail(@Param('slug') slug: string) {

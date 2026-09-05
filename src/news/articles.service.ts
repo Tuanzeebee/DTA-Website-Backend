@@ -17,6 +17,46 @@ import {
   UpdateArticleDto,
 } from './dto/article.dto';
 
+/* ------------------------------------------------------------------ *
+ *  Simple in-memory TTL cache for public endpoints                    *
+ *  Reduces DB load under high concurrent traffic.                     *
+ * ------------------------------------------------------------------ */
+
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+}
+
+const CACHE_TTL_MS = 60_000; // 60 seconds
+
+class MemoryCache {
+  private store = new Map<string, CacheEntry<unknown>>();
+
+  get<T>(key: string): T | null {
+    const entry = this.store.get(key);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      this.store.delete(key);
+      return null;
+    }
+    return entry.data as T;
+  }
+
+  set<T>(key: string, data: T): void {
+    this.store.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+  }
+
+  invalidate(prefix: string): void {
+    for (const key of this.store.keys()) {
+      if (key.startsWith(prefix)) this.store.delete(key);
+    }
+  }
+
+  clear(): void {
+    this.store.clear();
+  }
+}
+
 const detailInclude = {
   blocks: { orderBy: { position: 'asc' as const } },
   category: { include: { topic: true } },
@@ -29,9 +69,15 @@ type ArticleWithRelations = Prisma.NewsArticleGetPayload<{
 
 @Injectable()
 export class ArticlesService {
+  private cache = new MemoryCache();
+
   constructor(private readonly prisma: PrismaService) {}
 
   async listPublished(query: QueryArticlesDto) {
+    const cacheKey = `list:${JSON.stringify(query)}`;
+    const cached = this.cache.get<Record<string, unknown>>(cacheKey);
+    if (cached) return cached;
+
     const where = this.buildPublicWhere(query);
     const orderBy: Prisma.NewsArticleOrderByWithRelationInput =
       query.sort === 'oldest'
@@ -52,27 +98,46 @@ export class ArticlesService {
         },
       }),
     ]);
-    return {
+    const result = {
       items: rows.map((row) => this.toListItem(row)),
       total,
       page: query.page,
       pageCount: Math.max(1, Math.ceil(total / query.pageSize)),
     };
+    this.cache.set(cacheKey, result);
+    return result;
   }
 
   async getPublishedBySlug(slug: string) {
+    const cacheKey = `detail:${slug}`;
+    const cached = this.cache.get<Record<string, unknown>>(cacheKey);
+    if (cached) {
+      // still increment views (fire-and-forget)
+      this.prisma.newsArticle
+        .update({ where: { id: (cached as { id: string }).id }, data: { viewsCount: { increment: 1 } } })
+        .catch(() => {});
+      return cached;
+    }
     const article = await this.prisma.newsArticle.findFirst({
       where: { slug, status: ArticleStatus.PUBLISHED, deletedAt: null },
-      include: detailInclude,
+      select: { id: true },
     });
     if (!article) {
       throw new NotFoundException('Không tìm thấy bài viết');
     }
+    // Atomic increment — no race condition on concurrent reads
     await this.prisma.newsArticle.update({
       where: { id: article.id },
       data: { viewsCount: { increment: 1 } },
     });
-    return this.toDetail(article);
+    // Re-read with full relations for the response
+    const full = await this.prisma.newsArticle.findFirst({
+      where: { slug, status: ArticleStatus.PUBLISHED, deletedAt: null },
+      include: detailInclude,
+    });
+    const result = this.toDetail(full!);
+    this.cache.set(cacheKey, result);
+    return result;
   }
 
   async adminList(query: AdminQueryArticlesDto, actor: AuthUser) {
@@ -167,6 +232,7 @@ export class ArticlesService {
       },
       include: detailInclude,
     });
+    this.invalidateCache();
     return this.toDetail(created);
   }
 
@@ -223,6 +289,7 @@ export class ArticlesService {
       },
       include: detailInclude,
     });
+    this.invalidateCache();
     return this.toDetail(updated);
   }
 
@@ -242,6 +309,7 @@ export class ArticlesService {
       where: { id },
       data: { deletedAt: new Date(), status: ArticleStatus.ARCHIVED },
     });
+    this.invalidateCache();
     return { id, deleted: true };
   }
 
@@ -258,7 +326,46 @@ export class ArticlesService {
       },
       include: detailInclude,
     });
+    this.invalidateCache();
     return this.toDetail(updated);
+  }
+
+  /**
+   * Single-call digest: returns latest N articles for each requested topic.
+   * Reduces N separate API calls into 1.
+   */
+  async getDigest(topicSlugs: string[], pageSize: number) {
+    const cacheKey = `digest:${topicSlugs.join(',')}:${pageSize}`;
+    const cached = this.cache.get<Record<string, unknown>>(cacheKey);
+    if (cached) return cached;
+
+    const groups = await Promise.all(
+      topicSlugs.map(async (slug) => {
+        const rows = await this.prisma.newsArticle.findMany({
+          where: {
+            status: ArticleStatus.PUBLISHED,
+            deletedAt: null,
+            category: { topic: { slug } },
+          },
+          orderBy: { publishedAt: 'desc' },
+          take: pageSize,
+          include: {
+            category: { include: { topic: true } },
+            author: { select: { fullName: true } },
+          },
+        });
+        return { topic: slug, items: rows.map((r) => this.toListItem(r)) };
+      }),
+    );
+
+    const result = Object.fromEntries(groups.map((g) => [g.topic, g.items]));
+    this.cache.set(cacheKey, result);
+    return result;
+  }
+
+  /** Invalidate all public cache entries (call after any admin mutation). */
+  private invalidateCache(): void {
+    this.cache.clear();
   }
 
   private buildPublicWhere(

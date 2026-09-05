@@ -12,30 +12,67 @@ import {
   UpdateTopicDto,
 } from './dto/taxonomy.dto';
 
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+}
+const CACHE_TTL_MS = 300_000; // 5 minutes — topics/categories change rarely
+
+class MemoryCache {
+  private store = new Map<string, CacheEntry<unknown>>();
+  get<T>(key: string): T | null {
+    const e = this.store.get(key);
+    if (!e) return null;
+    if (Date.now() > e.expiresAt) {
+      this.store.delete(key);
+      return null;
+    }
+    return e.data as T;
+  }
+  set<T>(key: string, data: T): void {
+    this.store.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+  }
+  clear(): void {
+    this.store.clear();
+  }
+}
+
 @Injectable()
 export class TaxonomiesService {
+  private cache = new MemoryCache();
+
   constructor(private readonly prisma: PrismaService) {}
 
   async listTopics() {
-    return this.prisma.newsTopic.findMany({
+    const key = 'topics';
+    const cached = this.cache.get<unknown>(key);
+    if (cached) return cached;
+    const data = await this.prisma.newsTopic.findMany({
       orderBy: { sortOrder: 'asc' },
       include: { categories: { orderBy: { sortOrder: 'asc' } } },
     });
+    this.cache.set(key, data);
+    return data;
   }
 
   async listCategories(topicSlug?: string) {
-    return this.prisma.newsCategory.findMany({
+    const key = `cats:${topicSlug ?? 'all'}`;
+    const cached = this.cache.get<unknown>(key);
+    if (cached) return cached;
+    const data = await this.prisma.newsCategory.findMany({
       where: topicSlug ? { topic: { slug: topicSlug } } : undefined,
       orderBy: { sortOrder: 'asc' },
       include: { topic: { select: { slug: true, name: true } } },
     });
+    this.cache.set(key, data);
+    return data;
   }
 
   async createTopic(dto: CreateTopicDto) {
     const slug = await this.uniqueTopicSlug(
       dto.slug?.trim() || slugify(dto.name),
     );
-    return this.prisma.newsTopic.create({
+    const result = await this.prisma.newsTopic.create({
       data: {
         slug,
         name: dto.name,
@@ -45,6 +82,8 @@ export class TaxonomiesService {
         sortOrder: dto.sortOrder ?? 0,
       },
     });
+    this.cache.clear();
+    return result;
   }
 
   async updateTopic(id: number, dto: UpdateTopicDto) {
@@ -53,10 +92,12 @@ export class TaxonomiesService {
     if (dto.slug !== undefined) {
       slug = await this.uniqueTopicSlug(slugify(dto.slug), id);
     }
-    return this.prisma.newsTopic.update({
+    const result = await this.prisma.newsTopic.update({
       where: { id },
       data: { ...dto, slug },
     });
+    this.cache.clear();
+    return result;
   }
 
   async removeTopic(id: number) {
@@ -70,6 +111,7 @@ export class TaxonomiesService {
       );
     }
     await this.prisma.newsTopic.delete({ where: { id } });
+    this.cache.clear();
     return { id, deleted: true };
   }
 
@@ -78,7 +120,7 @@ export class TaxonomiesService {
     const slug = await this.uniqueCategorySlug(
       dto.slug?.trim() || slugify(dto.name),
     );
-    return this.prisma.newsCategory.create({
+    const result = await this.prisma.newsCategory.create({
       data: {
         slug,
         name: dto.name,
@@ -87,6 +129,8 @@ export class TaxonomiesService {
         topicId: dto.topicId,
       },
     });
+    this.cache.clear();
+    return result;
   }
 
   async updateCategory(id: number, dto: UpdateCategoryDto) {
@@ -98,10 +142,12 @@ export class TaxonomiesService {
     if (dto.topicId !== undefined) {
       await this.ensureTopic(dto.topicId);
     }
-    return this.prisma.newsCategory.update({
+    const result = await this.prisma.newsCategory.update({
       where: { id },
       data: { ...dto, slug },
     });
+    this.cache.clear();
+    return result;
   }
 
   async removeCategory(id: number) {
@@ -115,6 +161,7 @@ export class TaxonomiesService {
       );
     }
     await this.prisma.newsCategory.delete({ where: { id } });
+    this.cache.clear();
     return { id, deleted: true };
   }
 

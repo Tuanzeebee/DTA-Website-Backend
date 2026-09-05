@@ -117,6 +117,7 @@ model NewsCategory {
   topic       NewsTopic     @relation(fields: [topicId], references: [id], onDelete: Restrict)
   articles    NewsArticle[]
 
+  @@index([topicId])
   @@map("news_categories")
 }
 
@@ -146,8 +147,11 @@ model NewsArticle {
   blocks       NewsBlock[]
 
   @@index([status, publishedAt])
+  @@index([status, deletedAt])
   @@index([categoryId])
+  @@index([categoryId, status])
   @@index([authorId])
+  @@index([viewsCount])
   @@map("news_articles")
 }
 
