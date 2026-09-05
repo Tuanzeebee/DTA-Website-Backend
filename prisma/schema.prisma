@@ -170,3 +170,32 @@ model NewsBlock {
   @@index([articleId, position])
   @@map("news_blocks")
 }
+
+model Member {
+  id        String   @id @default(cuid())
+  name      String
+  role      String   @default("Hội viên")
+  type      String   @default("organization")
+  domain    String   @default("")
+  logoUrl   String?
+  website   String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("members")
+}
+
+model AdPlacement {
+  id        String   @id @default(cuid())
+  title     String
+  slot      String   @default("banner")
+  imageUrl  String
+  linkUrl   String
+  active    Boolean  @default(true)
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("ad_placements")
+}

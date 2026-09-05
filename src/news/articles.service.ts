@@ -132,7 +132,8 @@ export class ArticlesService {
       throw new NotFoundException('Không tìm thấy bài viết');
     }
     const canUpdateAny = hasPermission(actor, Permission.ARTICLE_UPDATE_ANY);
-    if (!canUpdateAny && article.authorId !== actor.id) {
+    // null authorId = system-imported article (crawl data) → any authorized user can manage
+    if (!canUpdateAny && article.authorId !== null && article.authorId !== actor.id) {
       throw new ForbiddenException('Bạn chỉ có thể xem bài viết của mình');
     }
     return { ...this.toDetail(article), rawHtml: article.rawHtml };
@@ -159,7 +160,7 @@ export class ArticlesService {
         categoryId: dto.categoryId,
         authorId: actor.id,
         status: canPublish ? ArticleStatus.PUBLISHED : ArticleStatus.DRAFT,
-        publishedAt: canPublish ? new Date() : null,
+        publishedAt: dto.publishedAt ?? (canPublish ? new Date() : null),
         blocks: dto.blocks
           ? { create: dto.blocks.map((block, index) => mapBlock(block, index)) }
           : undefined,
@@ -171,9 +172,12 @@ export class ArticlesService {
 
   async update(id: string, dto: UpdateArticleDto, actor: AuthUser) {
     const article = await this.findExisting(id);
+    // null authorId = system-imported article (crawl data) → any authorized user can manage
+    const isSystemOwned = article.authorId === null;
     const isOwner = article.authorId === actor.id;
     const canUpdate =
       hasPermission(actor, Permission.ARTICLE_UPDATE_ANY) ||
+      isSystemOwned ||
       (isOwner && hasPermission(actor, Permission.ARTICLE_UPDATE_OWN));
     if (!canUpdate) {
       throw new ForbiddenException('Bạn không có quyền sửa bài viết này');
@@ -209,6 +213,7 @@ export class ArticlesService {
         isIntern: dto.isIntern,
         categoryId: dto.categoryId,
         status: dto.status,
+        publishedAt: dto.publishedAt,
         blocks: dto.blocks
           ? {
               deleteMany: {},
@@ -223,9 +228,12 @@ export class ArticlesService {
 
   async remove(id: string, actor: AuthUser) {
     const article = await this.findExisting(id);
+    // null authorId = system-imported article (crawl data) → any authorized user can manage
+    const isSystemOwned = article.authorId === null;
     const isOwner = article.authorId === actor.id;
     const canDelete =
       hasPermission(actor, Permission.ARTICLE_DELETE_ANY) ||
+      isSystemOwned ||
       (isOwner && hasPermission(actor, Permission.ARTICLE_DELETE_OWN));
     if (!canDelete) {
       throw new ForbiddenException('Bạn không có quyền xóa bài viết này');

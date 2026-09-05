@@ -13,6 +13,7 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "seed:rbac": "ts-node scripts/seed-rbac.ts",
+    "seed:members": "ts-node scripts/seed-members.ts",
     "import:wordpress": "ts-node scripts/import-wordpress.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
