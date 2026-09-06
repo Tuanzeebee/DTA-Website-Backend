@@ -27,8 +27,9 @@ async function bootstrap(): Promise<void> {
 
   app.enableCors();
   const port = Number(process.env.PORT) || 3000;
-  await app.listen(port);
-  console.log(`DTA backend is running on http://localhost:${port}`);
+  const host = process.env.HOST || '127.0.0.1';
+  await app.listen(port, host);
+  console.log(`DTA backend is running on http://${host}:${port}`);
 }
 
 void bootstrap();
