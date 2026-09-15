@@ -41,7 +41,12 @@ export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
     Permission.ARTICLE_UPDATE_OWN,
     Permission.ARTICLE_DELETE_OWN,
   ],
-  [RoleName.MEMBER]: [Permission.MEMBER_CONTENT_READ],
+  [RoleName.MEMBER]: [
+    Permission.MEMBER_CONTENT_READ,
+    Permission.ARTICLE_CREATE,
+    Permission.ARTICLE_UPDATE_OWN,
+    Permission.ARTICLE_DELETE_OWN,
+  ],
   [RoleName.USER]: [],
 };
 

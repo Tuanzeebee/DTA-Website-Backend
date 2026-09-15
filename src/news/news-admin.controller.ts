@@ -44,7 +44,7 @@ export class NewsAdminController {
     private readonly taxonomiesService: TaxonomiesService,
   ) {}
 
-  @Roles(RoleName.AUTHOR, RoleName.EDITOR, RoleName.ADMIN, RoleName.SUPER_ADMIN)
+  @Roles(RoleName.MEMBER, RoleName.AUTHOR, RoleName.EDITOR, RoleName.ADMIN, RoleName.SUPER_ADMIN)
   @Post('upload')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -74,25 +74,25 @@ export class NewsAdminController {
     return { url: `/uploads/news/${file.filename}` };
   }
 
-  @Roles(RoleName.AUTHOR, RoleName.EDITOR, RoleName.ADMIN, RoleName.SUPER_ADMIN)
+  @Roles(RoleName.MEMBER, RoleName.AUTHOR, RoleName.EDITOR, RoleName.ADMIN, RoleName.SUPER_ADMIN)
   @Post('articles')
   create(@Body() dto: CreateArticleDto, @CurrentUser() actor: AuthUser) {
     return this.articlesService.create(dto, actor);
   }
 
-  @Roles(RoleName.AUTHOR, RoleName.EDITOR, RoleName.ADMIN, RoleName.SUPER_ADMIN)
+  @Roles(RoleName.MEMBER, RoleName.AUTHOR, RoleName.EDITOR, RoleName.ADMIN, RoleName.SUPER_ADMIN)
   @Get('articles')
   list(@Query() query: AdminQueryArticlesDto, @CurrentUser() actor: AuthUser) {
     return this.articlesService.adminList(query, actor);
   }
 
-  @Roles(RoleName.AUTHOR, RoleName.EDITOR, RoleName.ADMIN, RoleName.SUPER_ADMIN)
+  @Roles(RoleName.MEMBER, RoleName.AUTHOR, RoleName.EDITOR, RoleName.ADMIN, RoleName.SUPER_ADMIN)
   @Get('articles/:id')
   detail(@Param('id') id: string, @CurrentUser() actor: AuthUser) {
     return this.articlesService.findOneForAdmin(id, actor);
   }
 
-  @Roles(RoleName.AUTHOR, RoleName.EDITOR, RoleName.ADMIN, RoleName.SUPER_ADMIN)
+  @Roles(RoleName.MEMBER, RoleName.AUTHOR, RoleName.EDITOR, RoleName.ADMIN, RoleName.SUPER_ADMIN)
   @Patch('articles/:id')
   update(
     @Param('id') id: string,
@@ -102,7 +102,7 @@ export class NewsAdminController {
     return this.articlesService.update(id, dto, actor);
   }
 
-  @Roles(RoleName.AUTHOR, RoleName.EDITOR, RoleName.ADMIN, RoleName.SUPER_ADMIN)
+  @Roles(RoleName.MEMBER, RoleName.AUTHOR, RoleName.EDITOR, RoleName.ADMIN, RoleName.SUPER_ADMIN)
   @Delete('articles/:id')
   remove(@Param('id') id: string, @CurrentUser() actor: AuthUser) {
     return this.articlesService.remove(id, actor);

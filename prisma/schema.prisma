@@ -28,6 +28,12 @@ enum ArticleStatus {
   ARCHIVED
 }
 
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum BlockType {
   TEXT
   IMAGE
@@ -51,6 +57,8 @@ model User {
   passwordHash  String
   fullName      String
   avatarUrl     String?
+  memberId      String?        @unique
+  member        Member?        @relation(fields: [memberId], references: [id], onDelete: SetNull)
   status        UserStatus     @default(ACTIVE)
   roles         UserRole[]
   articles      NewsArticle[]
@@ -178,11 +186,17 @@ model NewsBlock {
 model Member {
   id        String   @id @default(cuid())
   name      String
+  nameEn    String?
   role      String   @default("Hội viên")
   type      String   @default("organization")
   domain    String   @default("")
+  ownership String?
+  leader    String?
+  phone     String?
+  strengths String?
   logoUrl   String?
   website   String?
+  user      User?
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -202,4 +216,30 @@ model AdPlacement {
   updatedAt DateTime @updatedAt
 
   @@map("ad_placements")
+}
+
+model MemberApplication {
+  id             String            @id @default(cuid())
+  trackingCode   String            @unique
+  orgName        String
+  nameEn         String?
+  ownership      String?
+  leader         String?
+  contactName    String?
+  email          String
+  phone          String?
+  type           String            @default("organization")
+  domain         String            @default("")
+  strengths      String?
+  techField      String?
+  consentDocUrl  String?
+  legalDocUrl    String?
+  message        String?
+  status         ApplicationStatus @default(PENDING)
+  createdMemberId String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([status, createdAt])
+  @@map("member_applications")
 }

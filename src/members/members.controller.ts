@@ -8,9 +8,15 @@ import {
   Post,
 } from '@nestjs/common';
 import { RoleName } from '@prisma/client';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { CreateMemberDto, UpdateMemberDto } from './dto/member.dto';
+import type { AuthUser } from '../common/permissions';
+import {
+  CreateMemberDto,
+  UpdateMemberDto,
+  UpdateMyProfileDto,
+} from './dto/member.dto';
 import { MembersService } from './members.service';
 
 @Controller()
@@ -23,6 +29,23 @@ export class MembersController {
   @Get('news/members')
   findPublic() {
     return this.membersService.findAll();
+  }
+
+  /* ---- member self-service (Không gian số) ---- */
+
+  @Get('member/profile')
+  @Roles(RoleName.MEMBER)
+  myProfile(@CurrentUser() user: AuthUser) {
+    return this.membersService.findMyProfile(user.id);
+  }
+
+  @Patch('member/profile')
+  @Roles(RoleName.MEMBER)
+  updateMyProfile(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: UpdateMyProfileDto,
+  ) {
+    return this.membersService.updateMyProfile(user.id, dto);
   }
 
   /* ---- admin ---- */
