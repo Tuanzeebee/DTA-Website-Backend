@@ -5,6 +5,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { AdsModule } from './ads/ads.module';
 import { ApplicationsModule } from './applications/applications.module';
 import { AuthModule } from './auth/auth.module';
+import { GalleryModule } from './gallery/gallery.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
 import { MembersModule } from './members/members.module';
@@ -30,6 +31,7 @@ import { UsersModule } from './users/users.module';
     MembersModule,
     ApplicationsModule,
     AdsModule,
+    GalleryModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

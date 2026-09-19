@@ -218,6 +218,19 @@ model AdPlacement {
   @@map("ad_placements")
 }
 
+model GalleryPhoto {
+  id        String   @id @default(cuid())
+  imageUrl  String
+  caption   String?
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active, sortOrder])
+  @@map("gallery_photos")
+}
+
 model MemberApplication {
   id             String            @id @default(cuid())
   trackingCode   String            @unique
