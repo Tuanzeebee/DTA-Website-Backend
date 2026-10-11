@@ -195,7 +195,7 @@ export function buildImageIndex(rootDir: string): Map<string, string[]> {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         walk(full);
-      } else {
+      } else if (entry.isFile() && !entry.name.endsWith('.tmp') && fs.statSync(full).size > 0) {
         const rel = toUnix(path.relative(rootDir, full));
         const list = index.get(entry.name) ?? [];
         list.push(rel);
@@ -217,7 +217,7 @@ export function resolveLocal(
     return null;
   }
   const exact = localMap[url];
-  if (exact) {
+  if (exact && index.get(path.posix.basename(toUnix(exact)))?.includes(toUnix(exact))) {
     return exact;
   }
   let name: string;
@@ -400,7 +400,24 @@ function writeDroppedReport(rootDir: string, dropped: { post: string; url: strin
   console.log(`  ảnh bỏ (không có bản local): ${dropped.length} -> ${toUnix(file)}`);
 }
 
-async function main(): Promise<void> {
+/** Gộp ảnh đợt import vào thư mục backend phục vụ, giữ nguyên ảnh bài cũ. */
+function copyImagesToExport(rootDir: string, index: Map<string, string[]>): void {
+  const targetDir = process.env.EXPORT_DIR || path.join(__dirname, '..', 'craw-data', 'export');
+  if (path.resolve(rootDir) === path.resolve(targetDir)) return;
+  let copied = 0;
+  for (const paths of index.values()) {
+    for (const relativePath of paths) {
+      const target = path.join(targetDir, relativePath);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.copyFileSync(path.join(rootDir, relativePath), target + '.tmp');
+      fs.renameSync(target + '.tmp', target);
+      copied += 1;
+    }
+  }
+  console.log(`Đã gộp ${copied} ảnh vào ${toUnix(targetDir)}`);
+}
+
+export async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const limitArg = args.indexOf('--limit');
   const exportArg = args.indexOf('--export');
@@ -414,6 +431,10 @@ async function main(): Promise<void> {
   if (!rootDir || !fs.existsSync(path.join(rootDir, 'manifest.json'))) {
     throw new Error(`Không tìm thấy manifest.json trong ${rootDir}`);
   }
+  const batchPath = path.join(rootDir, 'batch.json');
+  if (fs.existsSync(batchPath) && !loadJson<{ ready: boolean }>(batchPath).ready) {
+    throw new Error('Đợt cào chưa hoàn tất. Chạy lại lệnh new trước khi import.');
+  }
 
   let manifest = loadJson<ManifestRecord[]>(path.join(rootDir, 'manifest.json'));
   const categoriesJson = loadJson<WpCategory[]>(path.join(rootDir, 'categories.json'));
@@ -421,6 +442,17 @@ async function main(): Promise<void> {
     manifest = manifest.slice(0, limit);
   }
   console.log(`Import ${manifest.length} bài từ ${rootDir}`);
+  if (manifest.length === 0) {
+    console.log('Không có bài mới để import.');
+    return;
+  }
+  // Kiểm tra trước khi ghi DB để file thiếu không xoá nội dung/blocks đang có.
+  for (const rec of manifest) {
+    const htmlPath = path.join(rootDir, toUnix(rec.content_file));
+    if (!fs.existsSync(htmlPath) || !fs.statSync(htmlPath).isFile() || fs.statSync(htmlPath).size === 0) {
+      throw new Error(`Bài WP ${rec.id} thiếu HTML: ${htmlPath}. Chạy lại organize trước khi import.`);
+    }
+  }
 
   const wpByName = new Map(categoriesJson.map((c) => [c.name, c]));
   const imgIndex = buildImageIndex(rootDir);
@@ -449,6 +481,7 @@ async function main(): Promise<void> {
     return;
   }
 
+  copyImagesToExport(rootDir, imgIndex);
   const categoryIds = await ensureTaxonomies(categoriesJson);
   const categoryId = (slug: string): number => {
     const id = categoryIds.get(slug) ?? categoryIds.get(FALLBACK_CATEGORY);
@@ -495,15 +528,19 @@ async function main(): Promise<void> {
       secondaryCategoryIds: picked.secondary.map(categoryId),
       sourceUrl: rec.link || null,
       rawHtml: html,
-      tags: [] as string[],
-      status: ArticleStatus.PUBLISHED,
       publishedAt: rec.date ? new Date(rec.date) : null,
     };
     const blocksCreate = rawBlocks.map((block, position) =>
       mapRawBlock(block, position, localMap, imgIndex, rec.slug, stats),
     );
     const updateData = { ...base, blocks: { deleteMany: {}, create: blocksCreate } };
-    const createData = { ...base, blocks: { create: blocksCreate } };
+    // Bài đã có giữ trạng thái xuất bản và tags do admin quản lý.
+    const createData = {
+      ...base,
+      tags: [] as string[],
+      status: ArticleStatus.PUBLISHED,
+      blocks: { create: blocksCreate },
+    };
 
     try {
       await prisma.newsArticle.upsert({
