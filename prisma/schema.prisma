@@ -137,6 +137,8 @@ model NewsArticle {
   summary      String?       @db.Text
   thumbnailUrl String?
   categoryId   Int
+  /// Chuyên mục phụ — bài DSA gắn nhiều chuyên mục; bài vẫn hiện ở các chuyên mục này.
+  secondaryCategoryIds Int[] @default([])
   authorId     String?
   sourceUrl    String?
   rawHtml      String?       @db.Text
@@ -193,6 +195,13 @@ model Member {
   ownership String?
   leader    String?
   phone     String?
+  /// Email lãnh đạo (phone ở trên = SĐT lãnh đạo).
+  leaderEmail  String?
+  /// Cán bộ / chuyên viên quản lý — đầu mối tương tác.
+  contactName  String?
+  contactPhone String?
+  contactEmail String?
+  address      String?
   strengths String?
   logoUrl   String?
   website   String?
@@ -239,6 +248,9 @@ model MemberApplication {
   ownership      String?
   leader         String?
   contactName    String?
+  contactPhone   String?
+  leaderEmail    String?
+  address        String?
   email          String
   phone          String?
   type           String            @default("organization")

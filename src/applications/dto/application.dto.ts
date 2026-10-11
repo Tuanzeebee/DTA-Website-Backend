@@ -21,6 +21,18 @@ export class SubmitApplicationDto {
   @IsString()
   contactName?: string;
 
+  @IsOptional()
+  @IsString()
+  contactPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  leaderEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  address?: string;
+
   @IsEmail()
   email!: string;
 

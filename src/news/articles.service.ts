@@ -78,7 +78,7 @@ export class ArticlesService {
     const cached = this.cache.get<Record<string, unknown>>(cacheKey);
     if (cached) return cached;
 
-    const where = this.buildPublicWhere(query);
+    const where = await this.buildPublicWhere(query);
     const orderBy: Prisma.NewsArticleOrderByWithRelationInput =
       query.sort === 'oldest'
         ? { publishedAt: 'asc' }
@@ -148,17 +148,18 @@ export class ArticlesService {
     if (query.mine) {
       where.authorId = actor.id;
     }
-    if (query.category || query.topic) {
-      where.category = query.category
-        ? { slug: query.category }
-        : { topic: { slug: query.topic } };
-    }
+    const and: Prisma.NewsArticleWhereInput[] = [];
+    const catFilter = await this.categoryFilter(query.category, query.topic);
+    if (catFilter) and.push(catFilter);
     if (query.q) {
-      where.OR = [
-        { title: { contains: query.q, mode: 'insensitive' } },
-        { summary: { contains: query.q, mode: 'insensitive' } },
-      ];
+      and.push({
+        OR: [
+          { title: { contains: query.q, mode: 'insensitive' } },
+          { summary: { contains: query.q, mode: 'insensitive' } },
+        ],
+      });
     }
+    if (and.length) where.AND = and;
     const orderBy: Prisma.NewsArticleOrderByWithRelationInput = {
       updatedAt: 'desc',
     };
@@ -341,11 +342,12 @@ export class ArticlesService {
 
     const groups = await Promise.all(
       topicSlugs.map(async (slug) => {
+        const catFilter = await this.categoryFilter(undefined, slug);
         const rows = await this.prisma.newsArticle.findMany({
           where: {
             status: ArticleStatus.PUBLISHED,
             deletedAt: null,
-            category: { topic: { slug } },
+            ...catFilter,
           },
           orderBy: { publishedAt: 'desc' },
           take: pageSize,
@@ -368,27 +370,50 @@ export class ArticlesService {
     this.cache.clear();
   }
 
-  private buildPublicWhere(
+  /**
+   * Lọc theo chuyên mục (ưu tiên) hoặc chủ đề: khớp cả chuyên mục chính lẫn
+   * chuyên mục phụ (secondaryCategoryIds), vì bài DSA gắn nhiều chuyên mục.
+   */
+  private async categoryFilter(
+    category?: string,
+    topic?: string,
+  ): Promise<Prisma.NewsArticleWhereInput | null> {
+    if (!category && !topic) return null;
+    const cats = await this.prisma.newsCategory.findMany({
+      where: category ? { slug: category } : { topic: { slug: topic } },
+      select: { id: true },
+    });
+    const ids = cats.map((c) => c.id);
+    return {
+      OR: [
+        { categoryId: { in: ids } },
+        { secondaryCategoryIds: { hasSome: ids } },
+      ],
+    };
+  }
+
+  private async buildPublicWhere(
     query: QueryArticlesDto,
-  ): Prisma.NewsArticleWhereInput {
+  ): Promise<Prisma.NewsArticleWhereInput> {
     const where: Prisma.NewsArticleWhereInput = {
       status: ArticleStatus.PUBLISHED,
       deletedAt: null,
     };
-    if (query.category) {
-      where.category = { slug: query.category };
-    } else if (query.topic) {
-      where.category = { topic: { slug: query.topic } };
-    }
+    const and: Prisma.NewsArticleWhereInput[] = [];
+    const catFilter = await this.categoryFilter(query.category, query.topic);
+    if (catFilter) and.push(catFilter);
     if (query.flag === 'intern') {
       where.isIntern = true;
     }
     if (query.q) {
-      where.OR = [
-        { title: { contains: query.q, mode: 'insensitive' } },
-        { summary: { contains: query.q, mode: 'insensitive' } },
-      ];
+      and.push({
+        OR: [
+          { title: { contains: query.q, mode: 'insensitive' } },
+          { summary: { contains: query.q, mode: 'insensitive' } },
+        ],
+      });
     }
+    if (and.length) where.AND = and;
     return where;
   }
 

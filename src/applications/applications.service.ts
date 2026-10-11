@@ -47,6 +47,9 @@ export class ApplicationsService {
             ownership: dto.ownership ?? null,
             leader: dto.leader?.trim() || null,
             contactName: dto.contactName?.trim() || null,
+            contactPhone: dto.contactPhone?.trim() || null,
+            leaderEmail: dto.leaderEmail?.trim() || null,
+            address: dto.address?.trim() || null,
             email: dto.email.trim().toLowerCase(),
             phone: dto.phone?.trim() || null,
             type: dto.type ?? 'organization',
@@ -127,6 +130,12 @@ export class ApplicationsService {
           ownership: app.ownership,
           leader: app.leader,
           phone: app.phone,
+          leaderEmail: app.leaderEmail,
+          // Email đơn = email cán bộ đầu mối (cũng là email đăng nhập).
+          contactName: app.contactName,
+          contactPhone: app.contactPhone,
+          contactEmail: app.email,
+          address: app.address,
           strengths: app.strengths,
         },
       });

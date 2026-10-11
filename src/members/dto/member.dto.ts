@@ -35,6 +35,26 @@ export class CreateMemberDto {
 
   @IsOptional()
   @IsString()
+  leaderEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  contactName?: string;
+
+  @IsOptional()
+  @IsString()
+  contactPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  contactEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @IsOptional()
+  @IsString()
   strengths?: string;
 
   @IsOptional()
@@ -86,6 +106,26 @@ export class UpdateMemberDto {
 
   @IsOptional()
   @IsString()
+  leaderEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  contactName?: string;
+
+  @IsOptional()
+  @IsString()
+  contactPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  contactEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @IsOptional()
+  @IsString()
   strengths?: string;
 
   @IsOptional()
@@ -130,6 +170,26 @@ export class UpdateMyProfileDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  leaderEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  contactName?: string;
+
+  @IsOptional()
+  @IsString()
+  contactPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  contactEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  address?: string;
 
   @IsOptional()
   @IsString()
