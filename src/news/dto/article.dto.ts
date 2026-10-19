@@ -70,6 +70,11 @@ export class CreateArticleDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(200)
+  author?: string;
+
+  @IsOptional()
+  @IsString()
   slug?: string;
 
   @IsOptional()
@@ -129,6 +134,11 @@ export class UpdateArticleDto {
   @MinLength(3)
   @MaxLength(500)
   title?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  author?: string;
 
   @IsOptional()
   @IsString()

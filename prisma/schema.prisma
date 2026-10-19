@@ -140,6 +140,8 @@ model NewsArticle {
   /// Chuyên mục phụ — bài DSA gắn nhiều chuyên mục; bài vẫn hiện ở các chuyên mục này.
   secondaryCategoryIds Int[] @default([])
   authorId     String?
+  /// Tên tác giả hiển thị; authorId vẫn là tài khoản sở hữu bài để kiểm tra quyền.
+  authorName   String?
   sourceUrl    String?
   rawHtml      String?       @db.Text
   tags         String[]      @default([])

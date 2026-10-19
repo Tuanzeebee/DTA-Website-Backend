@@ -225,6 +225,7 @@ export class ArticlesService {
         isIntern: dto.isIntern ?? false,
         categoryId: dto.categoryId,
         authorId: actor.id,
+        authorName: dto.author?.trim(),
         status: canPublish ? ArticleStatus.PUBLISHED : ArticleStatus.DRAFT,
         publishedAt: dto.publishedAt ?? (canPublish ? new Date() : null),
         blocks: dto.blocks
@@ -270,6 +271,7 @@ export class ArticlesService {
       data: {
         title: dto.title,
         slug,
+        authorName: dto.author?.trim(),
         summary: dto.summary,
         thumbnailUrl: dto.thumbnailUrl,
         sourceUrl: dto.sourceUrl,
@@ -456,6 +458,7 @@ export class ArticlesService {
     id: string;
     slug: string;
     title: string;
+    authorName?: string | null;
     summary: string | null;
     thumbnailUrl: string | null;
     tags: string[];
@@ -483,7 +486,7 @@ export class ArticlesService {
       tags: article.tags,
       views: article.viewsCount,
       isIntern: article.isIntern,
-      author: article.author?.fullName ?? null,
+      author: article.authorName ?? article.author?.fullName ?? null,
     };
   }
 
