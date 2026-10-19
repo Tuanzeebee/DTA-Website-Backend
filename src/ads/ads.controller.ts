@@ -33,10 +33,8 @@ export class AdsController {
   @Public()
   @Get('news/ads')
   findPublic(@Query('slot') slot?: string) {
-    if (slot) {
-      return this.adsService.findActiveBySlot(slot);
-    }
-    return this.adsService.findAll();
+    // Public: chỉ QC đang bật — không lộ QC tắt/ghi chú nội bộ khi thiếu slot.
+    return this.adsService.findActiveBySlot(slot);
   }
 
   /* ---- admin ---- */

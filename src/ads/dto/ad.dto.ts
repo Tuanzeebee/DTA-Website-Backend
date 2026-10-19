@@ -1,4 +1,13 @@
-import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator';
+
+/** Vị trí có giao diện hiển thị trên trang tin (đồng bộ AdSlot ở frontend). */
+export const AD_SLOTS = ['banner', 'sidebar'] as const;
 
 export class CreateAdDto {
   @IsString()
@@ -6,7 +15,7 @@ export class CreateAdDto {
   title!: string;
 
   @IsOptional()
-  @IsString()
+  @IsIn(AD_SLOTS)
   slot?: string;
 
   @IsString()
@@ -33,7 +42,7 @@ export class UpdateAdDto {
   title?: string;
 
   @IsOptional()
-  @IsString()
+  @IsIn(AD_SLOTS)
   slot?: string;
 
   @IsOptional()

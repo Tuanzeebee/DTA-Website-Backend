@@ -12,9 +12,9 @@ export class AdsService {
     });
   }
 
-  async findActiveBySlot(slot: string) {
+  async findActiveBySlot(slot?: string) {
     return this.prisma.adPlacement.findMany({
-      where: { active: true, slot },
+      where: { active: true, ...(slot && { slot }) },
       orderBy: { createdAt: 'desc' },
     });
   }
