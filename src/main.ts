@@ -22,8 +22,17 @@ async function bootstrap(): Promise<void> {
 
   // Static file serving for images
   const exportDir = config.get<string>('EXPORT_DIR', './craw-data/export');
-  app.useStaticAssets(join(exportDir, 'images'), { prefix: '/news-images' });
-  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads' });
+  // Cache-Control để Cloudflare giữ ảnh ở edge thay vì mỗi lượt xem lại đi
+  // qua tunnel về VPS. Ảnh upload đặt tên `${Date.now()}-${uuid}` → bất biến.
+  app.useStaticAssets(join(exportDir, 'images'), {
+    prefix: '/news-images',
+    maxAge: '7d',
+  });
+  app.useStaticAssets(join(process.cwd(), 'uploads'), {
+    prefix: '/uploads',
+    maxAge: '30d',
+    immutable: true,
+  });
 
   app.enableCors();
   const port = Number(process.env.PORT) || 3000;
