@@ -35,13 +35,12 @@ export class NewsPublicController {
   digest(
     @Query('topics') topicsCsv?: string,
     @Query('pageSize') pageSize?: string,
-    @Query('primary') primary?: string,
   ) {
     const topics = topicsCsv
       ? topicsCsv.split(',').map((s) => s.trim()).filter(Boolean)
       : ['su-kien', 'tin-trong-nganh', 'dao-tao', 'xa-hoi', 'hoi-vien'];
     const size = Math.min(Number(pageSize) || 3, 10);
-    return this.articlesService.getDigest(topics, size, primary === '1');
+    return this.articlesService.getDigest(topics, size);
   }
 
   @Public()

@@ -232,8 +232,9 @@ export class QueryArticlesDto {
   sort: 'latest' | 'oldest' | 'views' = 'latest';
 
   @IsOptional()
-  @IsIn(['intern'])
-  flag?: 'intern';
+  /** intern = tin thực tập; upcoming = sự kiện chưa kết thúc (xếp theo ngày diễn ra). */
+  @IsIn(['intern', 'upcoming'])
+  flag?: 'intern' | 'upcoming';
 
   @IsOptional()
   @IsString()

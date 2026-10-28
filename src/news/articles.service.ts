@@ -85,7 +85,9 @@ export class ArticlesService {
 
     const where = await this.buildPublicWhere(query);
     const orderBy: Prisma.NewsArticleOrderByWithRelationInput =
-      query.sort === 'oldest'
+      query.flag === 'upcoming'
+        ? { eventStartAt: 'asc' } // sự kiện gần nhất lên đầu
+        : query.sort === 'oldest'
         ? { publishedAt: 'asc' }
         : query.sort === 'views'
           ? { viewsCount: 'desc' }
@@ -351,14 +353,14 @@ export class ArticlesService {
    * Single-call digest: returns latest N articles for each requested topic.
    * Reduces N separate API calls into 1.
    */
-  async getDigest(topicSlugs: string[], pageSize: number, primaryOnly = false) {
-    const cacheKey = `digest:${topicSlugs.join(',')}:${pageSize}:${primaryOnly}`;
+  async getDigest(topicSlugs: string[], pageSize: number) {
+    const cacheKey = `digest:${topicSlugs.join(',')}:${pageSize}`;
     const cached = this.cache.get<Record<string, unknown>>(cacheKey);
     if (cached) return cached;
 
     const groups = await Promise.all(
       topicSlugs.map(async (slug) => {
-        const catFilter = await this.categoryFilter(undefined, slug, primaryOnly);
+        const catFilter = await this.categoryFilter(undefined, slug);
         const rows = await this.prisma.newsArticle.findMany({
           where: {
             status: ArticleStatus.PUBLISHED,
@@ -387,28 +389,20 @@ export class ArticlesService {
   }
 
   /**
-   * Lọc theo chuyên mục (ưu tiên) hoặc chủ đề: khớp cả chuyên mục chính lẫn
-   * chuyên mục phụ (secondaryCategoryIds), vì bài DSA gắn nhiều chuyên mục.
+   * Lọc theo chuyên mục (ưu tiên) hoặc chủ đề — CHỈ chuyên mục chính.
+   * secondaryCategoryIds (bài DSA gắn nhiều chuyên mục) không dùng để lọc nữa:
+   * nó làm 1 bài hiện lẫn ở nhiều chủ đề (góp ý 28/10/2026).
    */
   private async categoryFilter(
     category?: string,
     topic?: string,
-    /** true = bỏ qua chuyên mục phụ — mỗi bài chỉ thuộc 1 topic (khối trang chủ). */
-    primaryOnly = false,
   ): Promise<Prisma.NewsArticleWhereInput | null> {
     if (!category && !topic) return null;
     const cats = await this.prisma.newsCategory.findMany({
       where: category ? { slug: category } : { topic: { slug: topic } },
       select: { id: true },
     });
-    const ids = cats.map((c) => c.id);
-    if (primaryOnly) return { categoryId: { in: ids } };
-    return {
-      OR: [
-        { categoryId: { in: ids } },
-        { secondaryCategoryIds: { hasSome: ids } },
-      ],
-    };
+    return { categoryId: { in: cats.map((c) => c.id) } };
   }
 
   private async buildPublicWhere(
@@ -423,6 +417,17 @@ export class ArticlesService {
     if (catFilter) and.push(catFilter);
     if (query.flag === 'intern') {
       where.isIntern = true;
+    }
+    if (query.flag === 'upcoming') {
+      // Sắp/đang diễn ra: chưa qua giờ kết thúc; không nhập kết thúc thì hết ngày
+      // bắt đầu (giờ VN). Bỏ bài tạm hoãn và bài không có lịch.
+      and.push({
+        eventPostponed: false,
+        OR: [
+          { eventEndAt: { gte: new Date() } },
+          { eventEndAt: null, eventStartAt: { gte: startOfTodayVn() } },
+        ],
+      });
     }
     if (query.q) {
       and.push({
@@ -546,6 +551,13 @@ export class ArticlesService {
       }),
     };
   }
+}
+
+/** 00:00 hôm nay theo giờ Việt Nam (UTC+7, không đổi giờ), bất kể múi giờ server. */
+function startOfTodayVn(now = Date.now()): Date {
+  const VN = 7 * 3600_000;
+  const DAY = 86400_000;
+  return new Date(Math.floor((now + VN) / DAY) * DAY - VN);
 }
 
 /** Ngày kết thúc không được trước ngày bắt đầu (khi gửi cả hai). */
