@@ -54,6 +54,8 @@ enum ImageWrap {
 model User {
   id            String         @id @default(uuid())
   email         String         @unique
+  /// Tài khoản đăng nhập do Hiệp hội cấp thủ công (đăng nhập bằng email hoặc tài khoản).
+  username      String?        @unique
   passwordHash  String
   fullName      String
   avatarUrl     String?
@@ -149,6 +151,13 @@ model NewsArticle {
   pdfUrl       String?
   memberUrl    String?
   isIntern     Boolean       @default(false)
+  /// Lịch sự kiện (chủ đề Sự kiện). Trạng thái Sắp diễn ra/Đang diễn ra/Đã kết thúc
+  /// tính lúc hiển thị từ 2 mốc này — dời lịch chỉ cần sửa ngày. Null = không hiện nhãn.
+  eventStartAt DateTime?
+  /// Null = kết thúc cuối ngày bắt đầu.
+  eventEndAt   DateTime?
+  /// Tạm hoãn chưa có lịch mới — hiện nhãn "Tạm hoãn" thay cho nhãn theo ngày.
+  eventPostponed Boolean     @default(false)
   status       ArticleStatus @default(DRAFT)
   publishedAt  DateTime?
   deletedAt    DateTime?

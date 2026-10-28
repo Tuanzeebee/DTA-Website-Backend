@@ -62,16 +62,33 @@ export class AuthService {
   }
 
   async login(dto: LoginDto): Promise<AuthResult> {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email.toLowerCase() },
+    const login = dto.email.trim().toLowerCase();
+    const user = await this.prisma.user.findFirst({
+      where: { OR: [{ email: login }, { username: login }] },
     });
     if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
-      throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
+      throw new UnauthorizedException('Tài khoản hoặc mật khẩu không đúng');
     }
     if (user.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedException('Tài khoản đã bị khóa hoặc vô hiệu hóa');
     }
     return this.issueTokens(user.id, user.email, user.fullName);
+  }
+
+  /** Hội viên tự quản mật khẩu: đổi khi biết mật khẩu hiện tại. */
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
+      throw new UnauthorizedException('Mật khẩu hiện tại không đúng');
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: await bcrypt.hash(newPassword, 10) },
+    });
   }
 
   async refresh(refreshToken: string): Promise<AuthResult> {

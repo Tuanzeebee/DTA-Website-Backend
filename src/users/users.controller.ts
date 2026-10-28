@@ -12,7 +12,13 @@ import { RoleName } from '@prisma/client';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthUser } from '../common/permissions';
-import { CreateUserDto, SetRolesDto, SetStatusDto } from './dto/users.dto';
+import {
+  CreateUserDto,
+  SetRolesDto,
+  SetPasswordDto,
+  SetStatusDto,
+  SetUsernameDto,
+} from './dto/users.dto';
 import { UsersService } from './users.service';
 
 @Controller('admin/users')
@@ -56,6 +62,20 @@ export class UsersController {
       throw new NotFoundException('Không thể thay đổi vai trò của chính mình');
     }
     return this.usersService.setRoles(id, dto);
+  }
+
+  @Patch(':id/password')
+  setPassword(
+    @Param('id') id: string,
+    @Body() dto: SetPasswordDto,
+    @CurrentUser() actor: AuthUser,
+  ) {
+    return this.usersService.setPassword(id, dto, actor);
+  }
+
+  @Patch(':id/username')
+  setUsername(@Param('id') id: string, @Body() dto: SetUsernameDto) {
+    return this.usersService.setUsername(id, dto);
   }
 
   @Patch(':id/status')

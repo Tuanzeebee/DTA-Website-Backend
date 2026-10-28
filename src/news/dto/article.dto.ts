@@ -121,6 +121,17 @@ export class CreateArticleDto {
   @IsOptional()
   publishedAt?: Date;
 
+  /** null = xoá lịch sự kiện. */
+  @IsOptional()
+  eventStartAt?: Date | null;
+
+  @IsOptional()
+  eventEndAt?: Date | null;
+
+  @IsOptional()
+  @IsBoolean()
+  eventPostponed?: boolean;
+
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
@@ -188,6 +199,17 @@ export class UpdateArticleDto {
 
   @IsOptional()
   publishedAt?: Date;
+
+  /** null = xoá lịch sự kiện. */
+  @IsOptional()
+  eventStartAt?: Date | null;
+
+  @IsOptional()
+  eventEndAt?: Date | null;
+
+  @IsOptional()
+  @IsBoolean()
+  eventPostponed?: boolean;
 
   @IsOptional()
   @IsArray()

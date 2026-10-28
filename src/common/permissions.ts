@@ -66,3 +66,13 @@ export interface AuthUser {
 export function hasPermission(user: AuthUser, permission: Permission): boolean {
   return user.roles.some((role) => roleHasPermission(role, permission));
 }
+
+/** Main Topic duy nhất hội viên được đăng bài (góp ý 27/10/2026). */
+export const MEMBER_TOPIC_SLUG = 'hoi-vien';
+
+/** Tài khoản chỉ mang quyền hội viên — không kèm vai trò biên tập/quản trị. */
+export function isMemberOnly(user: AuthUser): boolean {
+  return user.roles.every(
+    (role) => role === RoleName.MEMBER || role === RoleName.USER,
+  );
+}

@@ -5,7 +5,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ArticleStatus, ImageAlign, ImageWrap, Prisma } from '@prisma/client';
-import { hasPermission, Permission } from '../common/permissions';
+import {
+  hasPermission,
+  isMemberOnly,
+  MEMBER_TOPIC_SLUG,
+  Permission,
+} from '../common/permissions';
 import type { AuthUser } from '../common/permissions';
 import { slugify } from '../common/utils/slugify';
 import { PrismaService } from '../prisma/prisma.service';
@@ -198,15 +203,17 @@ export class ArticlesService {
       throw new NotFoundException('Không tìm thấy bài viết');
     }
     const canUpdateAny = hasPermission(actor, Permission.ARTICLE_UPDATE_ANY);
-    // null authorId = system-imported article (crawl data) → any authorized user can manage
-    if (!canUpdateAny && article.authorId !== null && article.authorId !== actor.id) {
+    // null authorId = system-imported article (crawl data) → any staff user can manage (not members)
+    const isSystemOwned = article.authorId === null && !isMemberOnly(actor);
+    if (!canUpdateAny && !isSystemOwned && article.authorId !== actor.id) {
       throw new ForbiddenException('Bạn chỉ có thể xem bài viết của mình');
     }
     return { ...this.toDetail(article), rawHtml: article.rawHtml };
   }
 
   async create(dto: CreateArticleDto, actor: AuthUser) {
-    await this.ensureCategory(dto.categoryId);
+    ensureEventRange(dto.eventStartAt, dto.eventEndAt);
+    await this.ensureCategory(dto.categoryId, actor);
     const canPublish =
       dto.status === ArticleStatus.PUBLISHED &&
       hasPermission(actor, Permission.ARTICLE_PUBLISH);
@@ -223,6 +230,9 @@ export class ArticlesService {
         pdfUrl: dto.pdfUrl,
         memberUrl: dto.memberUrl,
         isIntern: dto.isIntern ?? false,
+        eventStartAt: dto.eventStartAt,
+        eventEndAt: dto.eventEndAt,
+        eventPostponed: dto.eventPostponed ?? false,
         categoryId: dto.categoryId,
         authorId: actor.id,
         authorName: dto.author?.trim(),
@@ -239,9 +249,10 @@ export class ArticlesService {
   }
 
   async update(id: string, dto: UpdateArticleDto, actor: AuthUser) {
+    ensureEventRange(dto.eventStartAt, dto.eventEndAt);
     const article = await this.findExisting(id);
-    // null authorId = system-imported article (crawl data) → any authorized user can manage
-    const isSystemOwned = article.authorId === null;
+    // null authorId = system-imported article (crawl data) → any staff user can manage (not members)
+    const isSystemOwned = article.authorId === null && !isMemberOnly(actor);
     const isOwner = article.authorId === actor.id;
     const canUpdate =
       hasPermission(actor, Permission.ARTICLE_UPDATE_ANY) ||
@@ -264,7 +275,7 @@ export class ArticlesService {
       slug = await this.uniqueSlug(slugify(dto.slug), id);
     }
     if (dto.categoryId !== undefined) {
-      await this.ensureCategory(dto.categoryId);
+      await this.ensureCategory(dto.categoryId, actor);
     }
     const updated = await this.prisma.newsArticle.update({
       where: { id },
@@ -280,6 +291,9 @@ export class ArticlesService {
         pdfUrl: dto.pdfUrl,
         memberUrl: dto.memberUrl,
         isIntern: dto.isIntern,
+        eventStartAt: dto.eventStartAt,
+        eventEndAt: dto.eventEndAt,
+        eventPostponed: dto.eventPostponed,
         categoryId: dto.categoryId,
         status: dto.status,
         publishedAt: dto.publishedAt,
@@ -298,8 +312,8 @@ export class ArticlesService {
 
   async remove(id: string, actor: AuthUser) {
     const article = await this.findExisting(id);
-    // null authorId = system-imported article (crawl data) → any authorized user can manage
-    const isSystemOwned = article.authorId === null;
+    // null authorId = system-imported article (crawl data) → any staff user can manage (not members)
+    const isSystemOwned = article.authorId === null && !isMemberOnly(actor);
     const isOwner = article.authorId === actor.id;
     const canDelete =
       hasPermission(actor, Permission.ARTICLE_DELETE_ANY) ||
@@ -337,14 +351,14 @@ export class ArticlesService {
    * Single-call digest: returns latest N articles for each requested topic.
    * Reduces N separate API calls into 1.
    */
-  async getDigest(topicSlugs: string[], pageSize: number) {
-    const cacheKey = `digest:${topicSlugs.join(',')}:${pageSize}`;
+  async getDigest(topicSlugs: string[], pageSize: number, primaryOnly = false) {
+    const cacheKey = `digest:${topicSlugs.join(',')}:${pageSize}:${primaryOnly}`;
     const cached = this.cache.get<Record<string, unknown>>(cacheKey);
     if (cached) return cached;
 
     const groups = await Promise.all(
       topicSlugs.map(async (slug) => {
-        const catFilter = await this.categoryFilter(undefined, slug);
+        const catFilter = await this.categoryFilter(undefined, slug, primaryOnly);
         const rows = await this.prisma.newsArticle.findMany({
           where: {
             status: ArticleStatus.PUBLISHED,
@@ -379,6 +393,8 @@ export class ArticlesService {
   private async categoryFilter(
     category?: string,
     topic?: string,
+    /** true = bỏ qua chuyên mục phụ — mỗi bài chỉ thuộc 1 topic (khối trang chủ). */
+    primaryOnly = false,
   ): Promise<Prisma.NewsArticleWhereInput | null> {
     if (!category && !topic) return null;
     const cats = await this.prisma.newsCategory.findMany({
@@ -386,6 +402,7 @@ export class ArticlesService {
       select: { id: true },
     });
     const ids = cats.map((c) => c.id);
+    if (primaryOnly) return { categoryId: { in: ids } };
     return {
       OR: [
         { categoryId: { in: ids } },
@@ -429,12 +446,18 @@ export class ArticlesService {
     return article;
   }
 
-  private async ensureCategory(categoryId: number) {
+  private async ensureCategory(categoryId: number, actor: AuthUser) {
     const category = await this.prisma.newsCategory.findUnique({
       where: { id: categoryId },
+      include: { topic: { select: { slug: true } } },
     });
     if (!category) {
       throw new BadRequestException('Danh mục không tồn tại');
+    }
+    if (isMemberOnly(actor) && category.topic.slug !== MEMBER_TOPIC_SLUG) {
+      throw new ForbiddenException(
+        'Hội viên chỉ được đăng bài trong chủ đề Hội viên',
+      );
     }
   }
 
@@ -465,6 +488,9 @@ export class ArticlesService {
     viewsCount: number;
     isIntern: boolean;
     publishedAt: Date | null;
+    eventStartAt: Date | null;
+    eventEndAt: Date | null;
+    eventPostponed: boolean;
     category: {
       slug: string;
       name: string;
@@ -486,6 +512,9 @@ export class ArticlesService {
       tags: article.tags,
       views: article.viewsCount,
       isIntern: article.isIntern,
+      eventStartAt: article.eventStartAt,
+      eventEndAt: article.eventEndAt,
+      eventPostponed: article.eventPostponed,
       author: article.authorName ?? article.author?.fullName ?? null,
     };
   }
@@ -516,6 +545,15 @@ export class ArticlesService {
         return { box: block.text ?? '' };
       }),
     };
+  }
+}
+
+/** Ngày kết thúc không được trước ngày bắt đầu (khi gửi cả hai). */
+function ensureEventRange(start?: Date | null, end?: Date | null) {
+  if (start && end && new Date(end) < new Date(start)) {
+    throw new BadRequestException(
+      'Ngày kết thúc sự kiện phải sau ngày bắt đầu',
+    );
   }
 }
 
