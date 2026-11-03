@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
+import { toWebp } from '../common/utils/image';
 import { extname, join } from 'path';
 import { randomUUID } from 'crypto';
 import { RoleName } from '@prisma/client';
@@ -23,6 +24,7 @@ import type { AuthUser } from '../common/permissions';
 import {
   AdminQueryArticlesDto,
   CreateArticleDto,
+  RejectArticleDto,
   UpdateArticleDto,
 } from './dto/article.dto';
 import {
@@ -70,8 +72,8 @@ export class NewsAdminController {
       },
     }),
   )
-  uploadFile(@UploadedFile() file: Express.Multer.File) {
-    return { url: `/uploads/news/${file.filename}` };
+  async uploadFile(@UploadedFile() file: Express.Multer.File) {
+    return { url: `/uploads/news/${await toWebp(file)}` };
   }
 
   @Roles(RoleName.MEMBER, RoleName.AUTHOR, RoleName.EDITOR, RoleName.ADMIN, RoleName.SUPER_ADMIN)
@@ -112,6 +114,16 @@ export class NewsAdminController {
   @Patch('articles/:id/publish')
   publish(@Param('id') id: string, @CurrentUser() actor: AuthUser) {
     return this.articlesService.setPublished(id, true, actor);
+  }
+
+  @Roles(RoleName.EDITOR, RoleName.ADMIN, RoleName.SUPER_ADMIN)
+  @Patch('articles/:id/reject')
+  reject(
+    @Param('id') id: string,
+    @Body() dto: RejectArticleDto,
+    @CurrentUser() actor: AuthUser,
+  ) {
+    return this.articlesService.reject(id, dto.note, actor);
   }
 
   @Roles(RoleName.EDITOR, RoleName.ADMIN, RoleName.SUPER_ADMIN)

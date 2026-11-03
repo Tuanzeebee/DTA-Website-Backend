@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { ApplicationStatus, Prisma, RoleName } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
-import { randomBytes } from 'crypto';
+import { newTempPassword } from '../common/utils/password';
 import { PrismaService } from '../prisma/prisma.service';
 import { SubmitApplicationDto } from './dto/application.dto';
 
@@ -13,10 +13,6 @@ function newTrackingCode(): string {
   return 'DTA-' + Math.floor(1000 + Math.random() * 9000);
 }
 
-/** Mật khẩu tạm 12 ký tự, chỉ trả về 1 lần lúc cấp/cấp lại. */
-function newTempPassword(): string {
-  return randomBytes(9).toString('base64url').slice(0, 12);
-}
 
 @Injectable()
 export class ApplicationsService {

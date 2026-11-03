@@ -58,3 +58,6 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 /craw-data/export*/
 /craw-data/export*.zip
 /craw-data/__pycache__/
+
+# Mật khẩu tạm do scripts/member-accounts.ts sinh ra
+/scripts/member-accounts/out/

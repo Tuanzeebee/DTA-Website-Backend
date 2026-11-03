@@ -81,9 +81,11 @@ export class CreateArticleDto {
   @IsString()
   summary?: string;
 
+  /** Bắt buộc với biên tập; hội viên bỏ trống — luôn vào Tin doanh nghiệp. */
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
-  categoryId!: number;
+  categoryId?: number;
 
   @IsOptional()
   @IsString()
@@ -262,4 +264,16 @@ export class AdminQueryArticlesDto extends QueryArticlesDto {
   @IsOptional()
   @Type(() => Boolean)
   mine?: boolean;
+
+  /** Chỉ bài do tài khoản hội viên gửi (hàng chờ duyệt). */
+  @IsOptional()
+  @Type(() => Boolean)
+  fromMembers?: boolean;
+}
+
+export class RejectArticleDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  note?: string;
 }

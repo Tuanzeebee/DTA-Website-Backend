@@ -159,6 +159,8 @@ model NewsArticle {
   /// Tạm hoãn chưa có lịch mới — hiện nhãn "Tạm hoãn" thay cho nhãn theo ngày.
   eventPostponed Boolean     @default(false)
   status       ArticleStatus @default(DRAFT)
+  /// Lý do Ban Thư ký từ chối bài hội viên (status ARCHIVED, deletedAt null). Xoá khi hội viên sửa/gửi lại.
+  reviewNote   String?       @db.Text
   publishedAt  DateTime?
   deletedAt    DateTime?
   createdAt    DateTime      @default(now())

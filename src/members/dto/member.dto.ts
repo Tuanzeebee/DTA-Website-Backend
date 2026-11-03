@@ -1,4 +1,11 @@
+import { Transform } from 'class-transformer';
 import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+
+/** "www.abc.com" -> "https://www.abc.com" — thiếu scheme thì link thành đường dẫn tương đối (404). */
+export const withScheme = (v: unknown) =>
+  typeof v === 'string' && v.trim() && !/^[a-z][a-z\d+.-]*:/i.test(v.trim())
+    ? `https://${v.trim()}`
+    : v;
 
 export class CreateMemberDto {
   @IsString()
@@ -63,6 +70,7 @@ export class CreateMemberDto {
 
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => withScheme(value))
   website?: string;
 
   @IsOptional()
@@ -134,6 +142,7 @@ export class UpdateMemberDto {
 
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => withScheme(value))
   website?: string;
 
   @IsOptional()
@@ -201,5 +210,6 @@ export class UpdateMyProfileDto {
 
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => withScheme(value))
   website?: string;
 }

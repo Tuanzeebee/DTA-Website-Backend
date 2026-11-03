@@ -13,6 +13,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { RoleName } from '@prisma/client';
 import { diskStorage } from 'multer';
+import { toWebp } from '../common/utils/image';
 import { extname, join } from 'path';
 import { randomUUID } from 'crypto';
 import { Public } from '../auth/decorators/public.decorator';
@@ -101,7 +102,7 @@ export class GalleryController {
       },
     }),
   )
-  uploadFile(@UploadedFile() file: Express.Multer.File) {
-    return { url: `/uploads/gallery/${file.filename}` };
+  async uploadFile(@UploadedFile() file: Express.Multer.File) {
+    return { url: `/uploads/gallery/${await toWebp(file)}` };
   }
 }

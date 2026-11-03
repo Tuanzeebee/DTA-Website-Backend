@@ -4,10 +4,17 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ArticleStatus, ImageAlign, ImageWrap, Prisma } from '@prisma/client';
+import {
+  ArticleStatus,
+  ImageAlign,
+  ImageWrap,
+  Prisma,
+  RoleName,
+} from '@prisma/client';
 import {
   hasPermission,
   isMemberOnly,
+  MEMBER_CATEGORY_SLUG,
   MEMBER_TOPIC_SLUG,
   Permission,
 } from '../common/permissions';
@@ -152,8 +159,12 @@ export class ArticlesService {
     if (query.status) {
       where.status = query.status;
     }
-    if (query.mine) {
+    // Hội viên chỉ thấy bài của chính mình, kể cả khi không gửi ?mine.
+    if (query.mine || isMemberOnly(actor)) {
       where.authorId = actor.id;
+    }
+    if (query.fromMembers) {
+      where.author = { roles: { some: { role: { name: RoleName.MEMBER } } } };
     }
     const and: Prisma.NewsArticleWhereInput[] = [];
     const catFilter = await this.categoryFilter(query.category, query.topic);
@@ -187,6 +198,8 @@ export class ArticlesService {
       items: rows.map((row) => ({
         ...this.toListItem(row),
         status: row.status,
+        reviewNote: row.reviewNote,
+        createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         wpId: row.wpId,
       })),
@@ -210,12 +223,17 @@ export class ArticlesService {
     if (!canUpdateAny && !isSystemOwned && article.authorId !== actor.id) {
       throw new ForbiddenException('Bạn chỉ có thể xem bài viết của mình');
     }
-    return { ...this.toDetail(article), rawHtml: article.rawHtml };
+    return {
+      ...this.toDetail(article),
+      rawHtml: article.rawHtml,
+      reviewNote: article.reviewNote,
+    };
   }
 
   async create(dto: CreateArticleDto, actor: AuthUser) {
     ensureEventRange(dto.eventStartAt, dto.eventEndAt);
-    await this.ensureCategory(dto.categoryId, actor);
+    const categoryId = await this.resolveCategory(dto.categoryId, actor);
+    const member = isMemberOnly(actor);
     const canPublish =
       dto.status === ArticleStatus.PUBLISHED &&
       hasPermission(actor, Permission.ARTICLE_PUBLISH);
@@ -235,11 +253,15 @@ export class ArticlesService {
         eventStartAt: dto.eventStartAt,
         eventEndAt: dto.eventEndAt,
         eventPostponed: dto.eventPostponed ?? false,
-        categoryId: dto.categoryId,
+        categoryId,
         authorId: actor.id,
-        authorName: dto.author?.trim(),
+        // Hội viên để trống Tác giả → null để hiển thị rơi về tên đơn vị (User.fullName).
+        authorName: member ? dto.author?.trim() || null : dto.author?.trim(),
         status: canPublish ? ArticleStatus.PUBLISHED : ArticleStatus.DRAFT,
-        publishedAt: dto.publishedAt ?? (canPublish ? new Date() : null),
+        // Ngày đăng của bài hội viên = lúc Ban Thư ký duyệt.
+        publishedAt: member
+          ? null
+          : (dto.publishedAt ?? (canPublish ? new Date() : null)),
         blocks: dto.blocks
           ? { create: dto.blocks.map((block, index) => mapBlock(block, index)) }
           : undefined,
@@ -263,7 +285,10 @@ export class ArticlesService {
     if (!canUpdate) {
       throw new ForbiddenException('Bạn không có quyền sửa bài viết này');
     }
+    // Hội viên: status gửi lên bị bỏ qua (bên dưới luôn đưa về chờ duyệt).
+    const member = isMemberOnly(actor);
     if (
+      !member &&
       dto.status &&
       dto.status !== article.status &&
       !hasPermission(actor, Permission.ARTICLE_PUBLISH)
@@ -276,15 +301,17 @@ export class ArticlesService {
     if (dto.slug !== undefined && dto.slug !== article.slug) {
       slug = await this.uniqueSlug(slugify(dto.slug), id);
     }
-    if (dto.categoryId !== undefined) {
-      await this.ensureCategory(dto.categoryId, actor);
-    }
+    const categoryId =
+      dto.categoryId !== undefined || member
+        ? await this.resolveCategory(dto.categoryId, actor)
+        : undefined;
     const updated = await this.prisma.newsArticle.update({
       where: { id },
       data: {
         title: dto.title,
         slug,
-        authorName: dto.author?.trim(),
+        authorName:
+          member && dto.author !== undefined ? dto.author.trim() || null : dto.author?.trim(),
         summary: dto.summary,
         thumbnailUrl: dto.thumbnailUrl,
         sourceUrl: dto.sourceUrl,
@@ -296,9 +323,11 @@ export class ArticlesService {
         eventStartAt: dto.eventStartAt,
         eventEndAt: dto.eventEndAt,
         eventPostponed: dto.eventPostponed,
-        categoryId: dto.categoryId,
-        status: dto.status,
-        publishedAt: dto.publishedAt,
+        categoryId,
+        // Hội viên sửa bài (kể cả bài đã đăng / bị từ chối) → gỡ xuống, chờ duyệt lại.
+        ...(member
+          ? { status: ArticleStatus.DRAFT, reviewNote: null }
+          : { status: dto.status, publishedAt: dto.publishedAt }),
         blocks: dto.blocks
           ? {
               deleteMany: {},
@@ -342,11 +371,30 @@ export class ArticlesService {
       data: {
         status: published ? ArticleStatus.PUBLISHED : ArticleStatus.DRAFT,
         publishedAt: published ? (article.publishedAt ?? new Date()) : null,
+        ...(published && { reviewNote: null }),
       },
       include: detailInclude,
     });
     this.invalidateCache();
     return this.toDetail(updated);
+  }
+
+  /** Từ chối bài (hội viên gửi): ARCHIVED nhưng không xoá, kèm lý do để hội viên sửa & gửi lại. */
+  async reject(id: string, note: string | undefined, actor: AuthUser) {
+    if (!hasPermission(actor, Permission.ARTICLE_PUBLISH)) {
+      throw new ForbiddenException('Bạn không có quyền duyệt bài viết');
+    }
+    await this.findExisting(id);
+    const updated = await this.prisma.newsArticle.update({
+      where: { id },
+      data: {
+        status: ArticleStatus.ARCHIVED,
+        reviewNote: note?.trim() || null,
+      },
+      include: detailInclude,
+    });
+    this.invalidateCache();
+    return { ...this.toDetail(updated), reviewNote: updated.reviewNote };
   }
 
   /**
@@ -451,19 +499,46 @@ export class ArticlesService {
     return article;
   }
 
-  private async ensureCategory(categoryId: number, actor: AuthUser) {
+  /**
+   * Chuyên mục thực sự lưu cho bài. Hội viên: luôn là Tin doanh nghiệp
+   * (bỏ qua categoryId gửi lên); gửi chuyên mục ngoài chủ đề Hội viên → 403.
+   */
+  private async resolveCategory(
+    categoryId: number | undefined,
+    actor: AuthUser,
+  ): Promise<number> {
+    if (isMemberOnly(actor)) {
+      if (categoryId !== undefined) {
+        const picked = await this.prisma.newsCategory.findUnique({
+          where: { id: categoryId },
+          include: { topic: { select: { slug: true } } },
+        });
+        if (picked && picked.topic.slug !== MEMBER_TOPIC_SLUG) {
+          throw new ForbiddenException(
+            'Hội viên chỉ được đăng bài trong chủ đề Hội viên',
+          );
+        }
+      }
+      const memberCategory = await this.prisma.newsCategory.findUnique({
+        where: { slug: MEMBER_CATEGORY_SLUG },
+      });
+      if (!memberCategory) {
+        throw new BadRequestException(
+          `Chưa có chuyên mục "${MEMBER_CATEGORY_SLUG}" — liên hệ quản trị.`,
+        );
+      }
+      return memberCategory.id;
+    }
+    if (categoryId === undefined) {
+      throw new BadRequestException('Thiếu chuyên mục');
+    }
     const category = await this.prisma.newsCategory.findUnique({
       where: { id: categoryId },
-      include: { topic: { select: { slug: true } } },
     });
     if (!category) {
       throw new BadRequestException('Danh mục không tồn tại');
     }
-    if (isMemberOnly(actor) && category.topic.slug !== MEMBER_TOPIC_SLUG) {
-      throw new ForbiddenException(
-        'Hội viên chỉ được đăng bài trong chủ đề Hội viên',
-      );
-    }
+    return category.id;
   }
 
   private async uniqueSlug(base: string, excludeId?: string): Promise<string> {
