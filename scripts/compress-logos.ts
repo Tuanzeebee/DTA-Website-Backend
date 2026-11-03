@@ -69,13 +69,16 @@ async function main() {
           console.log(`${tag}: bỏ qua (đã nhẹ: ${kb(data.length)})`);
           continue;
         }
-        const newUrl = `/uploads/logos/${m.id}.webp`;
+        // Tên đổi mỗi lần nén: /uploads phục vụ kèm Cache-Control immutable 30 ngày,
+        // trùng tên thì trình duyệt/Cloudflare giữ logo CŨ khi đơn vị đổi logo.
+        const fileName = `${m.id}-${Date.now()}.webp`;
+        const newUrl = `/uploads/logos/${fileName}`;
         console.log(`${tag}: ${kb(data.length)} -> ${kb(out.length)}${external ? ' (tự lưu trữ logo ngoài)' : ''}`);
         before += data.length;
         after += out.length;
         changed += 1;
         if (!write) continue;
-        fs.writeFileSync(path.join(OUT_DIR, `${m.id}.webp`), out);
+        fs.writeFileSync(path.join(OUT_DIR, fileName), out);
         await prisma.member.update({ where: { id: m.id }, data: { logoUrl: newUrl } });
       } catch (error) {
         console.warn(`${tag}: LỖI ${url} — ${(error as Error).message}`);
