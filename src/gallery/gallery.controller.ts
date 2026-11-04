@@ -13,7 +13,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { RoleName } from '@prisma/client';
 import { diskStorage } from 'multer';
-import { toWebp } from '../common/utils/image';
+import { toWebp, writeThumb } from '../common/utils/image';
 import { extname, join } from 'path';
 import { randomUUID } from 'crypto';
 import { Public } from '../auth/decorators/public.decorator';
@@ -103,6 +103,9 @@ export class GalleryController {
     }),
   )
   async uploadFile(@UploadedFile() file: Express.Multer.File) {
-    return { url: `/uploads/gallery/${await toWebp(file)}` };
+    const name = await toWebp(file);
+    // Banner trang chủ dùng bản thu nhỏ (frontend: thumbOf) — xem src/common/utils/image.ts.
+    await writeThumb(join(process.cwd(), 'uploads', 'gallery', name));
+    return { url: `/uploads/gallery/${name}` };
   }
 }

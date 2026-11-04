@@ -29,3 +29,21 @@ export async function toWebp(file: Express.Multer.File): Promise<string> {
   if (outPath !== file.path) await unlink(file.path);
   return basename(outPath);
 }
+
+/** Bản thu nhỏ đặt cạnh ảnh gốc: abc.webp -> abc.thumb.webp. */
+export const thumbPathOf = (filePath: string) =>
+  filePath.replace(/\.[^.\\/]+$/, '') + '.thumb.webp';
+
+/**
+ * Ảnh thu nhỏ ≤640px cho lưới/banner (Thư viện ảnh hiển thị 288×192): trình
+ * duyệt giải mã ít điểm ảnh hơn ~5–8 lần → cuộn qua không giật. Ảnh gốc vẫn
+ * dùng cho xem phóng to.
+ */
+export async function writeThumb(filePath: string): Promise<void> {
+  const out = await sharp(await readFile(filePath))
+    .rotate()
+    .resize({ width: 640, height: 640, fit: 'inside', withoutEnlargement: true })
+    .webp({ quality: 78 })
+    .toBuffer();
+  await writeFile(thumbPathOf(filePath), out);
+}
