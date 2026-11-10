@@ -1,98 +1,127 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# DTA Website — Backend (API)
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+API cho website **dta.com.vn**: tin tức, hội viên, đơn đăng ký hội viên, thư viện ảnh, quảng cáo và trang quản trị.
+Frontend nằm ở repo `dta-news`.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Công nghệ
 
-## Description
+| Thành phần | Phiên bản |
+|---|---|
+| Node.js | ≥ 20 (khuyến nghị 22 LTS) |
+| NestJS (Express) | 11 |
+| TypeScript | 5.9 |
+| Prisma ORM | 6.19 |
+| PostgreSQL | ≥ 14 (đang chạy bản 18) |
+| Xác thực | JWT access token + refresh token, mật khẩu băm bcrypt |
+| Xử lý ảnh | sharp (ảnh upload tự chuyển sang WebP) |
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Cấu trúc thư mục
 
-## Project setup
-
-```bash
-$ npm install
+```
+src/            mã nguồn NestJS (auth, news, members, applications, gallery, ads...)
+prisma/         schema.prisma + migrations
+scripts/        script quản trị (seed, import WordPress, nén ảnh)
+craw-data/      công cụ cào bài từ trang DSA cũ (Python), xem craw-data/README.md
+uploads/        ảnh admin upload (KHÔNG có trong git, phải chép riêng)
 ```
 
-## Compile and run the project
+## Biến môi trường (`.env`)
+
+Tạo từ `.env.example`:
+
+| Biến | Ý nghĩa |
+|---|---|
+| `DATABASE_URL` | `postgresql://USER:PASSWORD@HOST:5432/dta?schema=public` |
+| `JWT_ACCESS_SECRET` | Chuỗi ngẫu nhiên ≥ 32 ký tự. Đổi chuỗi này thì mọi phiên đăng nhập cũ hết hiệu lực |
+| `JWT_EXPIRES_IN` | Thời hạn access token, ví dụ `15m` |
+| `REFRESH_TOKEN_TTL_DAYS` | Số ngày giữ đăng nhập, ví dụ `7` |
+| `EXPORT_DIR` | Thư mục **chứa** thư mục `images/` (ảnh bài viết), ví dụ `/opt/dta-data/export` |
+| `HOST` | Mặc định `127.0.0.1` (chỉ cho Nginx truy cập) |
+| `PORT` | Mặc định `3000` |
+| `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | Chỉ dùng khi seed DB trống. Bỏ qua nếu restore từ backup |
+
+## Build và chạy
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm ci
+npx prisma generate
+npm run build
+npx prisma migrate deploy     # đồng bộ schema DB
+node dist/main.js             # hoặc: npm run start:prod
 ```
 
-## Run tests
+Production nên chạy bằng systemd (Linux, mẫu ở `dta-news/deploy/dta-backend.service.example`)
+hoặc NSSM (Windows). Kiểm tra: `curl http://127.0.0.1:3000/news/topics`.
+
+Backend tự phục vụ hai nhóm file tĩnh:
+
+| URL | Thư mục trên đĩa |
+|---|---|
+| `/uploads/*` | `./uploads` (ảnh tin, gallery, quảng cáo, hồ sơ hội viên do admin upload) |
+| `/news-images/*` | `$EXPORT_DIR/images` (ảnh bài viết chuyển từ WordPress) |
+
+Nginx chuyển tiếp `/api/`, `/uploads/`, `/news-images/` vào cổng 3000, xem `dta-news/nginx.conf`.
+
+## Chuyển server (khôi phục từ dữ liệu bàn giao)
+
+Dữ liệu bàn giao gồm:
+
+| File | Nội dung |
+|---|---|
+| `dta.dump` | Database PostgreSQL (định dạng custom của `pg_dump`) |
+| `uploads.tar` | Thư mục `uploads/` |
+| Thư mục `export/` (Google Drive) | Ảnh bài viết `images/` + dữ liệu bài cào từ DSA |
+
+Các bước:
 
 ```bash
-# unit tests
-$ npm run test
+# 1. Tạo DB
+sudo -u postgres createuser --pwprompt dta
+sudo -u postgres createdb -O dta dta
 
-# e2e tests
-$ npm run test:e2e
+# 2. Restore dữ liệu
+pg_restore -U dta -h localhost -d dta --no-owner --role=dta dta.dump
 
-# test coverage
-$ npm run test:cov
+# 3. Ảnh
+mkdir -p uploads && tar -xf uploads.tar -C uploads
+#    Chép thư mục export/ từ Drive, rồi đặt EXPORT_DIR trỏ tới nó (chứa images/)
+
+# 4. Tạo .env, build, đồng bộ schema
+npx prisma migrate deploy     # "No pending migrations" là đã khớp
 ```
 
-## Deployment
+5. (Tuỳ chọn) Nếu thư mục `export/` có bài mới hơn bản `dta.dump`:
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+   ```bash
+   npm run import:wordpress -- --export "$EXPORT_DIR" --dry-run   # xem trước
+   npm run import:wordpress -- --export "$EXPORT_DIR"
+   ```
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+   Lệnh này cập nhật theo ID bài WordPress nên không tạo bài trùng. Nhưng nó **ghi đè** tiêu đề, nội dung,
+   chuyên mục và ảnh đại diện của các bài WordPress đã có bằng bản trên DSA (giữ trạng thái xuất bản và tags).
+
+6. Khởi động service, mở trang chủ, trang `/thu-vien-anh`, đăng nhập admin để kiểm tra.
+
+> ⚠️ **Sau khi restore KHÔNG chạy** `seed:rbac`, `seed:members` (sẽ tạo trùng dữ liệu).
+> Tài khoản admin và hội viên đã có sẵn trong `dta.dump`.
+
+## Script quản trị
+
+| Lệnh | Tác dụng |
+|---|---|
+| `npm run seed:rbac` | Tạo vai trò + admin đầu tiên (chỉ cho DB trống) |
+| `npm run seed:members` | Nạp danh sách hội viên ban đầu (chỉ cho DB trống) |
+| `npm run import:wordpress -- --export <dir>` | Nạp/cập nhật bài từ thư mục cào DSA |
+| `npx ts-node scripts/compress-images.ts [--write]` | Nén ảnh tại chỗ, giữ tên file (không có `--write` thì chỉ thống kê) |
+| `npm run gallery:thumbs` | Tạo ảnh thumbnail cho thư viện ảnh |
+| `npm test` | Chạy unit test |
+
+## Backup định kỳ
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+pg_dump -U dta -h localhost -F c -f dta-$(date +%Y%m%d).dump dta
+tar -cf uploads-$(date +%Y%m%d).tar -C uploads .
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Ảnh bài viết (`$EXPORT_DIR/images`) ít thay đổi, chỉ cần backup một lần.
+Bản Windows: `dta-news/deploy/backup-dta.ps1`.

@@ -685,7 +685,7 @@ function resolveImageUrl(
  * - `images/cat/slug/file.jpg` → WordPress import local, prefix /news-images/
  * - `https://...` → external URL, return as-is
  */
-function resolveThumbnailUrl(url: string | null | undefined): string {
+export function resolveThumbnailUrl(url: string | null | undefined): string {
   if (!url) return '';
   if (url.startsWith('/')) return url;
   if (url.startsWith('images/')) {
