@@ -1,0 +1,101 @@
+# Deploy backend lên VPS Windows của DTA.
+# Chạy trên self-hosted runner cài tại chính server (nhãn "dta") — không cần SSH,
+# không mở thêm cổng. Cài runner: dta-news/deploy/install-runner.ps1
+#
+# Build + test trong thư mục làm việc của runner, rồi mới dừng service và chép
+# dist / node_modules / prisma sang thư mục đang chạy. KHÔNG đụng tới .env,
+# uploads/, craw-data/. Health check lỗi → tự khôi phục bản trước.
+#
+# Biến tùy chọn (Settings → Secrets and variables → Actions → Variables):
+#   BACKEND_DIR     mặc định C:\DTAWeb\DTA-Website-main\dta-new-backend
+#   BACKEND_SERVICE mặc định DTA-Backend
+#   RUN_MIGRATIONS  "true" = chạy prisma migrate deploy (mặc định tắt)
+
+name: Deploy backend
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: powershell
+
+jobs:
+  deploy:
+    # Off until the runner is installed: set repo variable DEPLOY_ENABLED=true.
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: [self-hosted, windows, dta]
+    environment: production
+    env:
+      LIVE: ${{ vars.BACKEND_DIR || 'C:\DTAWeb\DTA-Website-main\dta-new-backend' }}
+      SERVICE: ${{ vars.BACKEND_SERVICE || 'DTA-Backend' }}
+      BACKUP: C:\DTAWeb\releases\backend-prev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install, build, test
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm ci;          if ($LASTEXITCODE) { throw 'npm ci failed' }
+          npm run build;   if ($LASTEXITCODE) { throw 'build failed' }
+          npx jest --ci;   if ($LASTEXITCODE) { throw 'tests failed' }
+
+      - name: Backup current release
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($d in 'dist','node_modules','prisma') {
+            robocopy "$env:LIVE\$d" "$env:BACKUP\$d" /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+            if ($LASTEXITCODE -ge 8) { throw "backup $d failed" }
+          }
+          Copy-Item "$env:LIVE\package*.json" $env:BACKUP -Force
+          $global:LASTEXITCODE = 0
+
+      - name: Stop service, swap files, start
+        id: swap
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Windows locks running files (Prisma .dll.node) -> stop first.
+          Stop-Service $env:SERVICE
+          foreach ($d in 'dist','node_modules','prisma') {
+            robocopy "$d" "$env:LIVE\$d" /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+            if ($LASTEXITCODE -ge 8) { throw "copy $d failed" }
+          }
+          Copy-Item package*.json $env:LIVE -Force
+          if ('${{ vars.RUN_MIGRATIONS }}' -eq 'true') {
+            Push-Location $env:LIVE
+            npx prisma migrate deploy; $rc = $LASTEXITCODE
+            Pop-Location
+            if ($rc) { throw 'prisma migrate deploy failed' }
+          }
+          Start-Service $env:SERVICE
+          $global:LASTEXITCODE = 0
+
+      - name: Health check
+        run: |
+          foreach ($i in 1..15) {
+            try {
+              Invoke-WebRequest http://127.0.0.1:3000/news/topics -UseBasicParsing -TimeoutSec 5 | Out-Null
+              Write-Host "Backend OK"; exit 0
+            } catch { Start-Sleep 2 }
+          }
+          throw 'Backend not responding after 30s'
+
+      - name: Rollback
+        # Only if live files were touched; a failed build leaves prod as-is.
+        if: failure() && steps.swap.outcome != 'skipped'
+        run: |
+          if (-not (Test-Path "$env:BACKUP\dist")) { Write-Host 'No backup yet'; exit 0 }
+          Stop-Service $env:SERVICE -ErrorAction SilentlyContinue
+          foreach ($d in 'dist','node_modules','prisma') {
+            robocopy "$env:BACKUP\$d" "$env:LIVE\$d" /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+          }
+          Copy-Item "$env:BACKUP\package*.json" $env:LIVE -Force
+          Start-Service $env:SERVICE
+          Write-Host 'Rolled back to previous release'
+          exit 0
