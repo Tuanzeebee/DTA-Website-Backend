@@ -12,7 +12,7 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node dist/src/main.js",
     "seed:rbac": "ts-node scripts/seed-rbac.ts",
     "seed:members": "ts-node scripts/seed-members.ts",
     "import:wordpress": "ts-node scripts/import-wordpress.ts",

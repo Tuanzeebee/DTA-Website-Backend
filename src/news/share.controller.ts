@@ -62,7 +62,6 @@ export function injectShareMeta(html: string, m: ShareMeta): string {
     `<meta property="og:site_name" content="DTA - Hiệp hội Công nghệ số Đà Nẵng" />`,
     `<meta property="og:locale" content="vi_VN" />`,
     `<meta property="og:image" content="${esc(m.image)}" />`,
-    `<meta property="og:image:secure_url" content="${esc(m.image)}" />`,
     `<meta property="og:image:type" content="image/jpeg" />`,
     `<meta property="og:image:width" content="${OG_W}" />`,
     `<meta property="og:image:height" content="${OG_H}" />`,
